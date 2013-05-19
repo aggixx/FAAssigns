@@ -19,7 +19,7 @@ local ROLE_STRINGS = {
   ["dps"]   = "<dps%d>", -- DPS
 };
 
--- declare locals for variables declared in ADDON_LOAD
+-- declare locals for variables declared in ADDON_LOADED
 -- (eg: SavedVariables)
 local debugOn;
 local inspectInterval;
