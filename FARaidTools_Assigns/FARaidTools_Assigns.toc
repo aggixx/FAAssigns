@@ -1,0 +1,7 @@
+## Interface: 50200
+## Title: FARaidTools_Assigns
+## Notes: Provides automatically generated raid assignments by spec and role.
+## Version: v1.0
+## Author: Pawkets
+
+FARaidTools_Assigns.lua
