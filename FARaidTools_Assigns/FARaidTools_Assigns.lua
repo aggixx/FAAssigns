@@ -207,8 +207,8 @@ local function slashParse(msg, editbox)
     elseif msg == "inspectFailed" then
       DevTools_Dump(inspectFailed);
     elseif msg == "completion" then
-      local count, total, missing = 0, GetNumGroupMembers(), "";
-      if #missing then
+      local count, total, missing = GetDataCompletionRate();
+      if #missing > 0 then
         local missingS = "";
 	for i=1,#missing do
 	  if i > 1 then
