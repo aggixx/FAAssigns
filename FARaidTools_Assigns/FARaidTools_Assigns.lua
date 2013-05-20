@@ -232,8 +232,12 @@ local function onUpdate(self, elapsed)
     for i=1,GetNumGroupMembers() do
       local unitId = GetUnitId(i);
       local name = UnitNameRealm(unitId);
-      if name == playerName or name == "Unknown" then
-        return
+      if name == playerName then
+        debug("Inspect NOT triggered for "..name.." (Reason: is player).", 3);
+        return;
+      elseif name == "Unknown" then
+        debug("Inspect NOT triggered for "..name.." (Reason: is Unknown).", 3);
+        return;
       end
       local lastCheck = GetSpecializationInfoByName(name);
       if (not lastCheck or currentTime - lastCheck >= renewTime) and not inspectFailed[name] then
