@@ -7,7 +7,7 @@ local ADDON_VERSION_FULL = "v1.0";
 local ADDON_VERSION = string.gsub(ADDON_VERSION_FULL, "[^%d]", "");
 local ADDON_DOWNLOAD_URL = "https://github.com/aggixx/FARaidTools_Assigns";
 
-local ADDON_COLOR = "00FF0000";
+local ADDON_COLOR = "FFF9CC30";
 local ADDON_CHAT_HEADER  = "|c" .. ADDON_COLOR .. "FA Assigns:|r ";
 local ADDON_MSG_PREFIX = "RT_Assigns";
 
@@ -197,6 +197,11 @@ local function slashParse(msg, editbox)
     return;
   elseif string.match(msg, "^debug %d") then
     debugOn = tonumber(string.match(msg, "^debug (%d)"));
+    if debugOn then
+      debug("Debug is now ON ("..debugOn..").");
+    else
+      debug("Debug is now OFF.");
+    end
     return;
   end
   
@@ -264,6 +269,8 @@ local function onUpdate(self, elapsed)
       inspectFailed[name] = currentTime;
       inspectInProgress = false;
       inspectStart = nil;
+      
+      timeSinceLastCheck = inspectInterval; -- cause an immediate check for another player to inspect
     end
   end
   
@@ -351,7 +358,7 @@ function events:INSPECT_READY()
     end
     ClearInspectPlayer();
     inspectInProgress = nil;
-    timeSinceLastCheck = 5;  -- cause an immediate check for another player to inspect
+    timeSinceLastCheck = inspectInterval;  -- cause an immediate check for another player to inspect
   end
 end
 --[[function events:COMBAT_LOG_EVENT_UNFILTERED(timestamp, event, hideCaster, srcGUID, srcName, srcFlags, srcFlags2, dstGUID, dstName, dstFlags, dstFlags2, ...)
