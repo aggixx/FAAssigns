@@ -267,7 +267,7 @@ function events:ADDON_LOADED(addon)
     -- inspect scan interval (eg: how often it is checked if anyone needs a renew)
     inspectInterval = RTA_options["inspectInterval"] or 5;
     -- amount of time before an inspect request is abandoned
-    inspectTimeout = RTA_options["inspectTimeout"] or 5;
+    inspectTimeout = RTA_options["inspectTimeout"] or 10;
     -- amount of time before trying a player than timed out an inspect again
     inspectRecovery = RTA_options["inspectRecovery"] or 60;
     -- the minimum amount of time before a reinspect is triggered on a specific character (barring specific triggers)
