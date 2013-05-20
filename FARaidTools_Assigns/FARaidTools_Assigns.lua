@@ -167,8 +167,11 @@ SLASH_ASSIGNS1 = "/assigns";
 local function slashParse(msg, editbox)
   msg = string.lower(msg);
   if msg == "" then
-    if UnitExists("target") then
-      msg = UnitName("target");
+    if UnitExists("target") and not UnitIsPlayer("target") then
+      msg = string.lower(UnitName("target"));
+    else
+      debug("You must specify (or target) a non-player unit.")
+      return;
     end
   elseif string.match(msg, "^dump ") then
     msg = string.gsub(msg, "^dump ", "");
@@ -179,16 +182,12 @@ local function slashParse(msg, editbox)
   end
 
   -- remove all non-alphabetical letters from the encounter name
-  msg = string.gsub(msg, "!%a", ""); -- FIXME: Pattern is wrong.
-
-  for i=1,#table_encounters do
-    for j=1,#table_encounters[i]["names"] do
-      if msg == table_encounters[i]["names"][j] then
-        RTAssigns:Show()
-        -- TODO: set the display window to the corresponding encounter entry
-        return
-      end
-    end
+  msg = string.gsub(msg, "[^%l]", "");
+  debug("msg = "..msg, 1)
+  
+  if table_encounters[msg] then
+    RTAssigns:Show()
+    -- TODO: set the display window to the corresponding encounter entry
   end
 end
 SlashCmdList["ASSIGNS"] = slashParse;
