@@ -3,6 +3,8 @@
 ## Notes: Provides automatically generated raid assignments by spec and role.
 ## Version: v1.0
 ## Author: Pawkets
+## OptionalDeps: FARaidTools
+## SavedVariables: RTA_options
 
 embeds.xml
 specData.lua
