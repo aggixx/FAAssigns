@@ -232,7 +232,7 @@ local function onUpdate(self, elapsed)
     for i=1,GetNumGroupMembers() do
       local unitId = GetUnitId(i);
       local name = UnitNameRealm(unitId);
-      if name == playerName then
+      if name == playerName or name == "Unknown" then
         return
       end
       local lastCheck = GetSpecializationInfoByName(name);
