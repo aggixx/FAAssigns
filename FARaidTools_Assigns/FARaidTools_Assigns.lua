@@ -361,12 +361,6 @@ function events:INSPECT_READY()
     timeSinceLastCheck = inspectInterval;  -- cause an immediate check for another player to inspect
   end
 end
---[[function events:COMBAT_LOG_EVENT_UNFILTERED(timestamp, event, hideCaster, srcGUID, srcName, srcFlags, srcFlags2, dstGUID, dstName, dstFlags, dstFlags2, ...)
-  if srcGUID == UnitGUID("player") then
-    local spellId, spellName, spellSchool = ...;
-    debug({[event] = {spellId, spellName, spellSchool}}, 3)
-  end
-end--]]
 function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
   debug({["PLAYER_SPECIALIZATION_CHANGED"] = {unitId}}, 3);
   if unitId and (unitId == "player" or UnitIsUnit(unitId, "player")) then
@@ -381,24 +375,6 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
     timeSinceLastCheck = inspectInterval;
   end
 end
---[[function events:ROLE_CHANGED_INFORM(player, changedBy, oldRole, newRole)
-  debug({["ROLE_CHANGED_INFORM"]={player, changedBy, oldRole, newRole}}, 2);
-  if oldRole ~= "NONE" and oldRole ~= newRole then
-    -- "player" variable does NOT include realm suffix so we must confirm
-    local unitId, name;
-    for i=1,GetNumGroupMembers() do
-      local unitId = GetUnitId(i);
-      if UnitName(unitId) == player then
-        name = UnitNameRealm(unitId);
-        break
-      end
-    end
-    if name then
-      SetSpecializationInfo(name, nil, true); -- reset time of last inspect for name
-      debug("Scheduled inspect for "..name.." (role changed).", 1);
-    end
-  end
-end--]]
 function events:GROUP_ROSTER_UPDATE()
   -- determine current group type
   if IsInRaid() then
