@@ -28,6 +28,8 @@ local ROLE_STRINGS = {
 -- (eg: SavedVariables)
 local debugOn;
 local inspectInterval;
+local inspectTimeout;
+local inspectRecovery;
 local renewTime;
 local purgeTime;
 local purgeTimeXr;
@@ -39,8 +41,10 @@ local _;
 local playerName;
 local timeSinceLastCheck = 0; -- onUpdate accumulator
 local inspectInProgress = false;
+local inspectStart;
 local groupType;
 local updateMsg = false;
+local inspectFailed = {};
 
 --helper functions
 local function debug(msg, verbosity)
@@ -125,12 +129,14 @@ local function generateAssigns(templateString)
       break;
     end
   end
+  debug({["blocks"] = blocks}, 2);
   
   -- assemble a list of candidates, we'll make a copy of this list once per block
   local candidatesCopy = {};
   for i=1,GetNumGroupMembers() do
     table.insert(candidatesCopy, UnitNameRealm(GetUnitId(i)));
   end
+  debug({["candidatesCopy"] = candidatesCopy}, 2);
 
   for i=1,#blocks do
     local candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
@@ -161,14 +167,19 @@ local function generateAssigns(templateString)
       end
     end
   end
+  
+  local s = "";
+  for i, v in ipairs(blocks) do
+    local s = s .. v;
+  end
+  return s;
 end
 
 SLASH_ASSIGNS1 = "/assigns";
 local function slashParse(msg, editbox)
-  msg = string.lower(msg);
   if msg == "" then
     if UnitExists("target") and not UnitIsPlayer("target") then
-      msg = string.lower(UnitName("target"));
+      msg = UnitName("target");
     else
       debug("You must specify (or target) a non-player unit.")
       return;
@@ -176,23 +187,34 @@ local function slashParse(msg, editbox)
   elseif string.match(msg, "^dump ") then
     msg = string.gsub(msg, "^dump ", "");
     if msg == "specs" then
-      DevTools_Dump(table_specializations)
+      DevTools_Dump(table_specializations);
+    elseif msg == "encounters" then
+      DevTools_Dump(table_encounters);
+    elseif msg == "inspectFailed" then
+      DevTools_Dump(inspectFailed);
     end
     return
   end
+  
+  -- set encounter name to lower case
+  msg = string.lower(msg);
 
   -- remove all non-alphabetical letters from the encounter name
   msg = string.gsub(msg, "[^%l]", "");
-  debug("msg = "..msg, 1)
   
   if table_encounters[msg] then
-    RTAssigns:Show()
+    --RTAssigns:Show()
     -- TODO: set the display window to the corresponding encounter entry
+    debug('Loading template for encounter "'..msg..'".', 1);
+    print(generateAssigns(table_encounters[msg]));
+  else
+    debug('Template for encounter "'..msg..'" was not found!');
   end
 end
 SlashCmdList["ASSIGNS"] = slashParse;
 
 local function onUpdate(self, elapsed)
+  local currentTime = time();
   timeSinceLastCheck = timeSinceLastCheck + elapsed;
   if not InCombatLockdown() and not inspectInProgress and timeSinceLastCheck >= 5 then -- TODO: Add "not InspectFrame:IsShown()" conditional
     debug("Checking for inspect candidates...", 3);
@@ -205,14 +227,29 @@ local function onUpdate(self, elapsed)
         return
       end
       local lastCheck = GetSpecializationInfoByName(name);
-      if not lastCheck or time() - lastCheck >= renewTime then
+      if (not lastCheck or currentTime - lastCheck >= renewTime) and not inspectFailed[name] then
         if CanInspect(unitId) then
           debug("Triggered inspect for "..name..".", 1);
           NotifyInspect(unitId);
-          inspectInProgress = unitId;
+          inspectInProgress, inspectStart = unitId, currentTime;
           break;
         end
       end
+    end
+  elseif inspectInProgress then
+    if currentTime - inspectStart >= inspectTimeout then
+      local name = UnitNameRealm(inspectInProgress);
+      debug("Inspect for "..name.." timed out!", 2)
+      ClearInspectPlayer();
+      inspectFailed[name] = currentTime;
+      inspectInProgress = false;
+      inspectStart = nil;
+    end
+  end
+  
+  for i, v in pairs(inspectFailed) do
+    if currentTime - v >= inspectRecovery then
+      inspectFailed[i] = nil;
     end
   end
 end
@@ -229,6 +266,10 @@ function events:ADDON_LOADED(addon)
     debugOn = RTA_options["debugOn"] or 2;
     -- inspect scan interval (eg: how often it is checked if anyone needs a renew)
     inspectInterval = RTA_options["inspectInterval"] or 5;
+    -- amount of time before an inspect request is abandoned
+    inspectTimeout = RTA_options["inspectTimeout"] or 5;
+    -- amount of time before trying a player than timed out an inspect again
+    inspectRecovery = RTA_options["inspectRecovery"] or 60;
     -- the minimum amount of time before a reinspect is triggered on a specific character (barring specific triggers)
     renewTime = RTA_options["renewTime"] or 15 * 60;
     -- amount of time before purging old character data entries
@@ -268,6 +309,8 @@ function events:PLAYER_LOGOUT()
     ["table_encounters"]      = table_encounters,
     ["debugOn"]               = debugOn,
     ["inspectInterval"]       = inspectInterval,
+    ["inspectTimeout"]        = inspectTimeout,
+    ["inspectRecovery"]       = inspectRecovery,
     ["renewTime"]             = renewTime,
     ["purgeTime"]             = purgeTime,
     ["purgeTimeXr"]           = purgeTimeXr,
@@ -281,6 +324,10 @@ function events:INSPECT_READY()
       debug("Retrieved "..name.."'s specialization as #"..id..".", 1);
     else
       debug("Retrieval of specialization info failed!", 1);
+      ClearInspectPlayer();
+      inspectFailed[name] = time();
+      inspectInProgress = false;
+      inspectStart = nil;
     end
     ClearInspectPlayer();
     inspectInProgress = nil;
@@ -306,7 +353,7 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
     SetSpecializationInfo(name, nil, true);
   end
 end
-function events:ROLE_CHANGED_INFORM(player, changedBy, oldRole, newRole)
+--[[function events:ROLE_CHANGED_INFORM(player, changedBy, oldRole, newRole)
   debug({["ROLE_CHANGED_INFORM"]={player, changedBy, oldRole, newRole}}, 2);
   if oldRole ~= "NONE" and oldRole ~= newRole then
     -- "player" variable does NOT include realm suffix so we must confirm
@@ -323,7 +370,7 @@ function events:ROLE_CHANGED_INFORM(player, changedBy, oldRole, newRole)
       debug("Scheduled inspect for "..name.." (role changed).", 1);
     end
   end
-end
+end--]]
 function events:GROUP_ROSTER_UPDATE()
   -- determine current group type
   if IsInRaid() then
