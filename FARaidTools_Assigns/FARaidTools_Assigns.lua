@@ -13,8 +13,8 @@ local ADDON_MSG_PREFIX = "RT_Assigns";
 
 local ASSIGN_BLOCK_NEW = "\n\-\-NEW BLOCK\-\-\n";
 
-local ROLE_STRINGS = {
-  -- {formatPattern, matchPattern},
+local ROLE_STRINGS = { -- FIXME: Change this so it is not keyed! pairs() does not respect its order.
+  -- ["name"] = "format",
   ["tank"]  = "<tank%d>", -- TANK
   ["rheal"] = "<rheal%d>", -- NON-MONK HEALERS
   ["mheal"] = "<mheal%d>", -- MONK HEALERS
@@ -142,6 +142,7 @@ local function generateAssigns(templateString)
     local candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
 
     for j, v in pairs(ROLE_STRINGS) do
+      debug(j, 2);
       local k = 1;
       while string.match(blocks[i], string.format(v, k)) do -- while there is spots left of this role to fill
         local success;
@@ -193,7 +194,10 @@ local function slashParse(msg, editbox)
     elseif msg == "inspectFailed" then
       DevTools_Dump(inspectFailed);
     end
-    return
+    return;
+  elseif string.match(msg, "^debug %d") then
+    debugOn = tonumber(string.match(msg, "^debug (%d)"));
+    return;
   end
   
   -- set encounter name to lower case
@@ -216,7 +220,7 @@ SlashCmdList["ASSIGNS"] = slashParse;
 local function onUpdate(self, elapsed)
   local currentTime = time();
   timeSinceLastCheck = timeSinceLastCheck + elapsed;
-  if not InCombatLockdown() and not inspectInProgress and timeSinceLastCheck >= 5 then -- TODO: Add "not InspectFrame:IsShown()" conditional
+  if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and not InCombatLockdown() then
     debug("Checking for inspect candidates...", 3);
     timeSinceLastCheck = 0;
 
@@ -228,12 +232,28 @@ local function onUpdate(self, elapsed)
       end
       local lastCheck = GetSpecializationInfoByName(name);
       if (not lastCheck or currentTime - lastCheck >= renewTime) and not inspectFailed[name] then
-        if CanInspect(unitId) then
+        if CanInspect(unitId) and UnitIsConnected(unitId) then
           debug("Triggered inspect for "..name..".", 1);
           NotifyInspect(unitId);
           inspectInProgress, inspectStart = unitId, currentTime;
           break;
+	elseif debugOn >= 3 then
+	  local reason;
+	  if not CanInspect(unitId) then
+	    reason = "CanInspect";
+	  else
+	    reason = "UnitIsConnected";
+	  end
+	  debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 3);
         end
+      elseif debugOn >= 3 then
+	local reason;
+	if not (not lastCheck or currentTime - lastCheck >= renewTime) then
+	  reason = "lastCheck";
+	else
+	  reason = "inspectFailed";
+	end
+	debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 3);
       end
     end
   elseif inspectInProgress then
@@ -265,13 +285,13 @@ function events:ADDON_LOADED(addon)
     table_encounters      = RTA_options["table_encounters"] or {};
     debugOn = RTA_options["debugOn"] or 2;
     -- inspect scan interval (eg: how often it is checked if anyone needs a renew)
-    inspectInterval = RTA_options["inspectInterval"] or 5;
+    inspectInterval = RTA_options["inspectInterval"] or 15;
     -- amount of time before an inspect request is abandoned
     inspectTimeout = RTA_options["inspectTimeout"] or 10;
     -- amount of time before trying a player than timed out an inspect again
     inspectRecovery = RTA_options["inspectRecovery"] or 60;
     -- the minimum amount of time before a reinspect is triggered on a specific character (barring specific triggers)
-    renewTime = RTA_options["renewTime"] or 15 * 60;
+    renewTime = RTA_options["renewTime"] or 60 * 60;
     -- amount of time before purging old character data entries
     purgeTime = RTA_options["purgeTime"] or 10 * 24 * 60 * 60;
     -- same as above, but for people offrealm
@@ -342,7 +362,7 @@ end
 end--]]
 function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
   debug({["PLAYER_SPECIALIZATION_CHANGED"] = {unitId}}, 3);
-  if unitId == "player" then
+  if unitId and (unitId == "player" or UnitIsUnit(unitId, "player")) then
     SetSpecializationInfo(UnitNameRealm("player"), GetSpecializationInfo(GetSpecialization()));
   elseif unitId and unitId ~= "" then
     local name = UnitNameRealm(unitId);
@@ -351,6 +371,7 @@ function events:PLAYER_SPECIALIZATION_CHANGED(unitId)
     end
     debug("Scheduled inspect for "..name.." (specialization changed).", 1);
     SetSpecializationInfo(name, nil, true);
+    timeSinceLastCheck = inspectInterval;
   end
 end
 --[[function events:ROLE_CHANGED_INFORM(player, changedBy, oldRole, newRole)
