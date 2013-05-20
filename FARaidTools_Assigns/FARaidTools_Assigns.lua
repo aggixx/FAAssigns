@@ -82,7 +82,7 @@ local function UnitNameRealm(unit)
   if unit and unit ~= "" then
     local name, realm = UnitName(unit);
     if realm and realm ~= "" then
-      name = name.."-"..realml;
+      name = name.."-"..realm;
     end
     return name;
   else
@@ -96,6 +96,19 @@ local function GetUnitId(i)
   else
     return groupType..i;
   end
+end
+
+local function GetDataCompletionRate()
+  local count, total, missing = 0, GetNumGroupMembers(), {};
+  for i=1,total do
+    local name = UnitNameRealm(GetUnitId(i));
+    if table_specializations[name] then
+      count = count + 1;
+    else
+      table.insert(missing, name);
+    end
+  end
+  return count, total, missing
 end
 
 -- main code
@@ -193,6 +206,20 @@ local function slashParse(msg, editbox)
       DevTools_Dump(table_encounters);
     elseif msg == "inspectFailed" then
       DevTools_Dump(inspectFailed);
+    elseif msg == "completion" then
+      local count, total, missing = 0, GetNumGroupMembers(), "";
+      if #missing then
+        local missingS = "";
+	for i=1,#missing do
+	  if i > 1 then
+	    missingS = missingS .. ", ";
+	  end
+	  missingS = missingS .. missing[i]
+	end
+        debug(string.format("Data completion rate is %d/%d (%d%%). Missing data for: %s", count, total, count/total*100, missingS));
+      else
+        debug(string.format("Data completion rate is %d/%d (%d%%).", count, total, count/total*100));
+      end
     end
     return;
   elseif string.match(msg, "^debug %d") then
@@ -225,18 +252,19 @@ SlashCmdList["ASSIGNS"] = slashParse;
 local function onUpdate(self, elapsed)
   local currentTime = time();
   timeSinceLastCheck = timeSinceLastCheck + elapsed;
-  if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and not InCombatLockdown() then
+  if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and (not InCombatLockdown() or debugOn >= 3) then
     debug("Checking for inspect candidates...", 3);
     timeSinceLastCheck = 0;
-
+    
+    debug(GetNumGroupMembers(), 3);
     for i=1,GetNumGroupMembers() do
       local unitId = GetUnitId(i);
       local name = UnitNameRealm(unitId);
       if name == playerName then
-        debug("Inspect NOT triggered for "..name.." (Reason: is player).", 3);
+	debug("Inspect NOT triggered for "..name.." (Reason: is player).", 3);
         return;
       elseif name == "Unknown" then
-        debug("Inspect NOT triggered for "..name.." (Reason: is Unknown).", 3);
+	debug("Inspect NOT triggered for "..name.." (Reason: is Unknown).", 3);
         return;
       end
       local lastCheck = GetSpecializationInfoByName(name);
