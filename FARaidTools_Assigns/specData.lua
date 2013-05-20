@@ -73,7 +73,7 @@ RTA_specData = {
   },
   [256] = { -- Discipline Priest
     ["rheal"] = true,
-    ["heal] = true,
+    ["heal"] = true,
   },
   [257] = { -- Holy Priest
     ["rheal"] = true,

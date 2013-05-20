@@ -1,10 +1,15 @@
+-- load libraries
+local libSerialize = LibStub:GetLibrary("AceSerializer-3.0");
+
 -- declare strings
 local ADDON_NAME = "FARaidTools_Assigns";
 local ADDON_VERSION_FULL = "v1.0";
 local ADDON_VERSION = string.gsub(ADDON_VERSION_FULL, "[^%d]", "");
+local ADDON_DOWNLOAD_URL = "https://github.com/aggixx/FARaidTools_Assigns";
 
-local ADDON_COLOR = "00FF0000"
+local ADDON_COLOR = "00FF0000";
 local ADDON_CHAT_HEADER  = "|c" .. ADDON_COLOR .. "FA Assigns:|r ";
+local ADDON_MSG_PREFIX = "RT_Assigns";
 
 local ASSIGN_BLOCK_NEW = "\n\-\-NEW BLOCK\-\-\n";
 
@@ -35,6 +40,7 @@ local playerName;
 local timeSinceLastCheck = 0; -- onUpdate accumulator
 local inspectInProgress = false;
 local groupType;
+local updateMsg = false;
 
 --helper functions
 local function debug(msg, verbosity)
@@ -48,6 +54,15 @@ local function debug(msg, verbosity)
       DevTools_Dump(msg);
     end
   end
+end
+
+local SendAddonMessageOld = SendAddonMessage;
+local function SendAddonMessage(prefix, message, type, target)
+  message = libSerialize:Serialize(message);
+  if not message then
+    return false;
+  end
+  return SendAddonMessageOld(prefix, message, type, target);
 end
 
 local GetNumGroupMembersOld = GetNumGroupMembers;
@@ -221,6 +236,8 @@ function events:ADDON_LOADED(addon)
     purgeTime = RTA_options["purgeTime"] or 10 * 24 * 60 * 60;
     -- same as above, but for people offrealm
     purgeTimeXr = RTA_options["purgeTimeXr"] or 3 * 24 * 60 * 60;
+    
+    RegisterAddonMessagePrefix("RT_Assigns");
   end
 end
 function events:PLAYER_LOGIN()
@@ -308,7 +325,7 @@ function events:ROLE_CHANGED_INFORM(player, changedBy, oldRole, newRole)
     end
   end
 end
-events:GROUP_ROSTER_UPDATE()
+function events:GROUP_ROSTER_UPDATE()
   -- determine current group type
   if IsInRaid() then
     groupType = "raid";
@@ -318,7 +335,7 @@ events:GROUP_ROSTER_UPDATE()
     groupType = "player";
   end
 end
-event:RAID_ROSTER_UPDATE()
+function events:RAID_ROSTER_UPDATE()
   -- determine current group type
   if IsInRaid() then
     groupType = "raid";
@@ -326,6 +343,41 @@ event:RAID_ROSTER_UPDATE()
     groupType = "party";
   else
     groupType = "player";
+  end
+end
+function events:GROUP_JOINED()
+  if IsInRaid() then
+    SendAddonMessage(ADDON_MSG_PREFIX, {["versionCheck"] = ADDON_VERSION_FULL,}, "RAID")
+  end
+end
+function events:CHAT_MSG_ADDON(prefix, message, channel, sender)
+  if prefix == ADDON_MSG_PREFIX then
+    local message = libSerialize:Deserialize(message)
+    if not (message and type(message) == "table") then
+      return;
+    end
+    for i, v in pairs(message) do
+      if i == "versionCheck" then
+        if channel == "WHISPER" then
+	  if not updateMsg then
+	    print("Your current version of "..ADDON_NAME.." is not up to date! Please go to "..ADDON_DOWNLOAD_URL.." to update.");
+	    updateMsg = true;
+	  end
+	elseif channel == "RAID" or channel == "GUILD" then
+	  if not v then
+            return;
+	  end
+	  if v < ADDON_VERSION_FULL then
+	    SendAddonMessage(ADDON_MSG_PREFIX, {["versionCheck"] = "",}, "WHISPER", sender)
+	  elseif not updateMsg then
+	    if ADDON_VERSION_FULL < v then
+	      print("Your current version of "..ADDON_NAME.." is not up to date! Please go to "..ADDON_DOWNLOAD_URL.." to update.");
+	      updateMsg = true;
+	    end
+	  end
+	end
+      end
+    end
   end
 end
 frame:SetScript("OnEvent", function(self, event, ...)
