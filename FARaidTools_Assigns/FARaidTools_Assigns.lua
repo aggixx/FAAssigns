@@ -14,14 +14,14 @@ local ADDON_MSG_PREFIX = "RT_Assigns";
 local ASSIGN_BLOCK_NEW = "\n\-\-NEW BLOCK\-\-\n";
 
 local ROLE_STRINGS = { -- FIXME: Change this so it is not keyed! pairs() does not respect its order.
-  -- ["name"] = "format",
-  ["tank"]  = "<tank%d>", -- TANK
-  ["rheal"] = "<rheal%d>", -- NON-MONK HEALERS
-  ["mheal"] = "<mheal%d>", -- MONK HEALERS
-  ["heal"]  = "<heal%d>", -- HEALER
-  ["rdps"]  = "<rdps%d>", -- RANGED DPS
-  ["mdps"]  = "<mdps%d>", -- MELEE DPS
-  ["dps"]   = "<dps%d>", -- DPS
+  -- {"role", "<role%d>"},
+  {"tank", "<tank%d>"}, -- TANK
+  {"rheal", "<rheal%d>"}, -- NON-MONK HEALERS
+  {"mheal", "<mheal%d>"}, -- MONK HEALERS
+  {"heal", "<heal%d>"}, -- HEALER
+  {"rdps", "<rdps%d>"}, -- RANGED DPS
+  {"mdps", "<mdps%d>"}, -- MELEE DPS
+  {"dps", "<dps%d>"}, -- DPS
 };
 
 -- declare locals for variables declared in ADDON_LOADED
@@ -154,25 +154,27 @@ local function generateAssigns(templateString)
   for i=1,#blocks do
     local candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
 
-    for j, v in pairs(ROLE_STRINGS) do
-      debug(j, 2);
+    for j=1,#ROLE_STRINGS do
+      debug(ROLE_STRINGS[j][1], 2);
       local k = 1;
-      while string.match(blocks[i], string.format(v, k)) do -- while there is spots left of this role to fill
+      while string.match(blocks[i], string.format(ROLE_STRINGS[j][2], k)) do -- while there is spots left of this role to fill
         local success;
-        for l, w in ipairs(candidates) do -- loop through all remaining candidates in this block
+	local limit = #candidates;
+        for l=0,limit-1 do -- loop through all remaining candidates in this block
           -- check if this candidate matches our criteria
-          if table_specializations[w] then
-            local id = table_specializations[w][2]
-            if RTA_specData[id] and RTA_specData[id][v] then
+          if table_specializations[candidates[limit-l]] then
+            local id = table_specializations[candidates[limit-l]][2]
+            if RTA_specData[id] and RTA_specData[id][ROLE_STRINGS[j][2]] then
               -- this candidate matches
-              blocks[i] = string.gsub(blocks[i], string.format(v, k), w); -- replace template text with candidate's name
-              table.remove(candidates, l); -- each player can only be assigned once per block
+              blocks[i] = string.gsub(blocks[i], string.format(ROLE_STRINGS[j][2], k), candidates[limit-l]); -- replace template text with candidate's name
+              table.remove(candidates, limit-l); -- each player can only be assigned once per block
               -- so remove them from the candidate list for this block
               success = true; -- set success variable so loop knows to continue
               break; -- since we likely still have candidates left for this role
             end
           end
         end
+	debug("k = "..k, 3);
         if success then
           k = k + 1; -- successfully found a match, so keep going
         else -- we're out of candidates for this role so break loop early
@@ -253,18 +255,17 @@ local function onUpdate(self, elapsed)
   local currentTime = time();
   timeSinceLastCheck = timeSinceLastCheck + elapsed;
   if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and (not InCombatLockdown() or debugOn >= 3) then
-    debug("Checking for inspect candidates...", 3);
+    debug("Scanning "..GetNumGroupMembers().." group members for inspect candidates...", 3);
     timeSinceLastCheck = 0;
     
-    debug(GetNumGroupMembers(), 3);
     for i=1,GetNumGroupMembers() do
       local unitId = GetUnitId(i);
       local name = UnitNameRealm(unitId);
       if name == playerName then
-	debug("Inspect NOT triggered for "..name.." (Reason: is player).", 3);
+	debug("Inspect NOT triggered for "..name.." (Reason: is player).", 4);
         return;
       elseif name == "Unknown" then
-	debug("Inspect NOT triggered for "..name.." (Reason: is Unknown).", 3);
+	debug("Inspect NOT triggered for "..name.." (Reason: is Unknown).", 4);
         return;
       end
       local lastCheck = GetSpecializationInfoByName(name);
@@ -274,23 +275,23 @@ local function onUpdate(self, elapsed)
           NotifyInspect(unitId);
           inspectInProgress, inspectStart = unitId, currentTime;
           break;
-	elseif debugOn >= 3 then
+	elseif debugOn >= 4 then
 	  local reason;
 	  if not CanInspect(unitId) then
 	    reason = "CanInspect";
 	  else
 	    reason = "UnitIsConnected";
 	  end
-	  debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 3);
+	  debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 4);
         end
-      elseif debugOn >= 3 then
+      elseif debugOn >= 4 then
 	local reason;
 	if not (not lastCheck or currentTime - lastCheck >= renewTime) then
 	  reason = "lastCheck";
 	else
 	  reason = "inspectFailed";
 	end
-	debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 3);
+	debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 4);
       end
     end
   elseif inspectInProgress then
@@ -332,7 +333,7 @@ function events:ADDON_LOADED(addon)
     -- the minimum amount of time before a reinspect is triggered on a specific character (barring specific triggers)
     renewTime = RTA_options["renewTime"] or 60 * 60;
     -- amount of time before purging old character data entries
-    purgeTime = RTA_options["purgeTime"] or 10 * 24 * 60 * 60;
+    purgeTime = RTA_options["purgeTime"] or 17 * 24 * 60 * 60;
     -- same as above, but for people offrealm
     purgeTimeXr = RTA_options["purgeTimeXr"] or 3 * 24 * 60 * 60;
     
@@ -442,7 +443,7 @@ function events:CHAT_MSG_ADDON(prefix, message, channel, sender)
       if i == "versionCheck" then
         if channel == "WHISPER" then
 	  if not updateMsg then
-	    print("Your current version of "..ADDON_NAME.." is not up to date! Please go to "..ADDON_DOWNLOAD_URL.." to update.");
+	    debug("Your current version is not up to date! Please go to "..ADDON_DOWNLOAD_URL.." to update.");
 	    updateMsg = true;
 	  end
 	elseif channel == "RAID" or channel == "GUILD" then
@@ -453,7 +454,7 @@ function events:CHAT_MSG_ADDON(prefix, message, channel, sender)
 	    SendAddonMessage(ADDON_MSG_PREFIX, {["versionCheck"] = "",}, "WHISPER", sender)
 	  elseif not updateMsg then
 	    if ADDON_VERSION_FULL < v then
-	      print("Your current version of "..ADDON_NAME.." is not up to date! Please go to "..ADDON_DOWNLOAD_URL.." to update.");
+	      debug("Your current version is not up to date! Please go to "..ADDON_DOWNLOAD_URL.." to update.");
 	      updateMsg = true;
 	    end
 	  end
