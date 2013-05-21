@@ -196,7 +196,7 @@ local function generateAssigns(templateString)
       x = x + 1;
       local group = string.match(blocks[i], "%d+{%d+%l+%s?.-}");
       local unitCap = tonumber(string.match(blocks[i], "(%d+){%d+%l+%s?.-}"));
-      debug("group unitCap = "..unitCap, 1);
+      debug("group unitCap = "..unitCap, 4);
       local s = "";
       
       local y = 0;
@@ -204,7 +204,7 @@ local function generateAssigns(templateString)
 	y = y + 1;
         local roleCap, role = string.match(group, "(%d+)(%l+)");
 	roleCap = tonumber(roleCap);
-	debug("role = "..role..", roleCap = "..roleCap, 1);
+	debug("role = "..role..", roleCap = "..roleCap, 4);
 	
 	local limit = #candidates;
         for j=0,limit-1 do -- loop through all remaining candidates in this block
@@ -212,13 +212,13 @@ local function generateAssigns(templateString)
           if table_specializations[candidates[limit-j]] then
             local id = table_specializations[candidates[limit-j]][2]
             if RTA_specData[id] and RTA_specData[id][role] then
-	      debug("Adding "..candidates[limit-j].." to s2.", 1);
+	      debug("Adding "..candidates[limit-j].." to s2.", 4);
 	      
 	      -- append the player's name to s2
 	      if s ~= "" then
 	        s = s .. " ";
 	      end
-	      s = s .. string.match(candidates[limit-j], "^%a+");
+	      s = s .. string.match(candidates[limit-j], "^[^-]+");
 	      
 	      -- remove the player from the candidate list
 	      table.remove(candidates, limit-j);
@@ -227,10 +227,10 @@ local function generateAssigns(templateString)
 	      -- decrement the param count
 	      roleCap = roleCap - 1
 	      if roleCap > 0 then
-	        debug("Decremented "..role.." to "..roleCap..".", 1);
+	        debug("Decremented "..role.." to "..roleCap..".", 4);
 	        group = string.gsub(group, string.match(group, "%d+%l+"), roleCap..role, 1);
 	      else
-	        debug("Role limit reached, removed "..role.." param.", 1);
+	        debug("Role limit reached, removed "..role.." param.", 4);
 	        group = string.gsub(group, string.match(group, "%d+%l+%s*"), "", 1);
 		break;
 	      end
@@ -238,19 +238,19 @@ local function generateAssigns(templateString)
 	      if select(2, string.gsub(s, "[%a-]+", "")) >= unitCap then
 		break;
 	      else
-	        debug("players in group = "..select(2, string.gsub(s, "[%a-]+", ""))..", unitCap = "..unitCap, 1);
+	        debug("players in group = "..select(2, string.gsub(s, "[%a-]+", ""))..", unitCap = "..unitCap, 4);
 	      end
 	    end
 	  end
 	  
 	  if j == limit-1 then
-	    debug("Candidate limit reached.", 1);
+	    debug("Candidate limit reached.", 4);
 	    group = string.gsub(group, string.match(group, "%d+%l+%s*"), "", 1);
 	  end
 	end
 	
 	if select(2, string.gsub(s, "[%a-]+", "")) >= unitCap then
-	  debug("Group limit reached ("..select(2, string.gsub(s, "[%a-]+", ""))..").", 1);
+	  debug("Group limit reached ("..select(2, string.gsub(s, "[%a-]+", ""))..").", 4);
 	  break;
 	end
       end
@@ -270,7 +270,7 @@ local function generateAssigns(templateString)
             local id = table_specializations[candidates[limit-l]][2]
             if RTA_specData[id] and RTA_specData[id][ROLE_STRINGS[j][1]] then
               -- this candidate matches
-              blocks[i] = string.gsub(blocks[i], string.format(ROLE_STRINGS[j][2], k), string.match(candidates[limit-l], "^%a+")); -- replace template text with candidate's name
+              blocks[i] = string.gsub(blocks[i], string.format(ROLE_STRINGS[j][2], k), string.match(candidates[limit-l], "^[^-]+")); -- replace template text with candidate's name
               table.remove(candidates, limit-l); -- each player can only be assigned once per block
               -- so remove them from the candidate list for this block
               success = true; -- set success variable so loop knows to continue
