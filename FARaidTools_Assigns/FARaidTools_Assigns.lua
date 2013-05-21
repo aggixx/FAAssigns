@@ -293,7 +293,7 @@ onUpdateFrame:SetScript("OnUpdate", onUpdate)
 -- Create a container frame
 local frame = AceGUI:Create("Frame");
 frame:SetCallback("OnClose", function(this)
-  this:Hide()
+  this:Hide();
 end);
 frame:SetTitle("FARaidTools_Assigns");
 --frame:SetStatusText("Status Bar");
@@ -330,6 +330,9 @@ frame:AddChild(dropdown);
 frame:AddChild(editboxInput);
 frame:AddChild(editboxOutput);
 frame:AddChild(button);
+
+-- Hide GUI
+frame:Hide();
 
 -- set scripts
 local function editboxInput_OnEnterPressed(this, event, template)
