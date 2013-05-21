@@ -529,7 +529,16 @@ function events:ADDON_LOADED(addon)
   if addon == ADDON_NAME then
     RTA_options           = RTA_options or {};
     table_specializations = RTA_options["table_specializations"] or {};
-    table_encounters      = RTA_options["table_encounters"] or {};
+    table_encounters      = RTA_options["table_encounters"] or {
+	["leishen25n"] = {
+		["template"] = "{star}: <heal1> <tank1> <dps1> <dps7> <dps11> <dps15> <dps19>\n{square}: <heal2> <heal5> <dps2> <dps5> <dps8> <dps12> <dps16>\n{diamond}: <heal3> <tank2> <dps3> <dps9> <dps13> <dps17>\n{x}: <heal4> <heal6> <dps4> <dps6> <dps10> <dps14> <dps18>",
+		["displayName"] = "Lei Shen 25N",
+	},
+	["durumutheforgotten10n"] = {
+		["template"] = "Red: <rdps1> <rdps2> <rdps3> <mdps3> <mdps4>\nYellow: <tank1> <tank2> <mdps1> <mdps2> <rdps4> <rdps5> <dps2>\nBlue: <heal1> <heal2> <heal3> <dps1>",
+		["displayName"] = "Durumu the Forgotten 10N",
+	},
+    };
     debugOn = RTA_options["debugOn"] or 0;
     -- inspect scan interval (eg: how often it is checked if anyone needs a renew)
     inspectInterval = RTA_options["inspectInterval"] or 15;
