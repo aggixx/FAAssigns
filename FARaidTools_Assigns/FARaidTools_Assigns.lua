@@ -317,7 +317,13 @@ editboxInput:SetNumLines(6);
 -- Create the encounter selection dropdown
 local dropdown = AceGUI:Create("Dropdown");
 dropdown:SetLabel("Encounter");
-dropdown:SetWidth(300);
+dropdown:SetWidth(206);
+
+-- Create the new encounter button
+local button2 = AceGUI:Create("Button");
+button2:SetWidth(60);
+button2:SetHeight(25);
+button2:SetText("New");
 
 -- Create the announce button
 local button = AceGUI:Create("Button");
@@ -327,12 +333,15 @@ button:SetText("Announce to Group");
 
 -- add widgets to frame as children
 frame:AddChild(dropdown);
+frame:AddChild(button2);
 frame:AddChild(editboxInput);
 frame:AddChild(editboxOutput);
 frame:AddChild(button);
 
 -- Hide GUI
-frame:Hide();
+if debugOn == 0 then
+  frame:Hide();
+end
 
 -- set scripts
 local function editboxInput_OnEnterPressed(this, event, template)
@@ -358,6 +367,38 @@ end
 
 dropdown:SetCallback("OnValueChanged", dropdown_OnValueChanged);
 editboxInput:SetCallback("OnEnterPressed", editboxInput_OnEnterPressed);
+
+StaticPopupDialogs["RTA_NEW_ENCOUNTER"] = {
+  text = "Name of encounter (eg: Nalak or Ji'kun 25H):",
+  button1 = ACCEPT,
+  button2 = CANCEL,
+  hasEditBox = true,
+  OnAccept = function(self)
+    local text = self.editBox:GetText();
+    local slug = GetEncounterSlug(text);
+    table_encounters[slug] = {
+      ["displayName"] = text,
+      ["template"] = "",
+    };
+    table_dropdown = GetDropdownTable();
+    dropdown:SetList(table_dropdown);
+    for i=1,#table_dropdown do
+      if table_dropdown[i] == text then
+        dropdown:SetValue(i);
+        dropdown_OnValueChanged(nil, nil, i);
+        break;
+      end
+    end
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,  -- avoid some UI taint, see http://www.wowace.com/announcements/how-to-avoid-some-ui-taint/
+}
+
+button2:SetCallback("OnClick", function(this, event)
+  StaticPopup_Show("RTA_NEW_ENCOUNTER")
+end);
 
 button:SetCallback("OnClick", function(this, event)
   local text, lines = editboxOutput:GetText(), {};
