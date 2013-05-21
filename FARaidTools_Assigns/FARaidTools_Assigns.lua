@@ -30,7 +30,6 @@ local ROLE_STRINGS = {
 local debugOn;
 local inspectInterval;
 local inspectTimeout;
-local inspectRecovery;
 local renewTime;
 local purgeTime;
 local purgeTimeXr;
@@ -260,25 +259,23 @@ local function onUpdate(self, elapsed)
 	  debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 4);
         end
       end
+      
+      if i == GetNumGroupMembers() then -- if we've made it to the end of the loop
+        inspectFailed = {}; -- then clear the failed list so we can try those people again
+      end
     end
   elseif inspectInProgress then
     if currentTime - inspectStart >= inspectTimeout then
       local name = UnitNameRealm(inspectInProgress);
       if name then
         debug("Inspect for "..name.." timed out!", 2);
-        inspectFailed[name] = currentTime;
+        inspectFailed[name] = true;
       end
       ClearInspectPlayer();
       inspectInProgress = false;
       inspectStart = nil;
       
       timeSinceLastCheck = inspectInterval; -- cause an immediate check for another player to inspect
-    end
-  end
-  
-  for i, v in pairs(inspectFailed) do
-    if currentTime - v >= inspectRecovery then
-      inspectFailed[i] = nil;
     end
   end
 end
@@ -538,8 +535,6 @@ function events:ADDON_LOADED(addon)
     inspectInterval = RTA_options["inspectInterval"] or 15;
     -- amount of time before an inspect request is abandoned
     inspectTimeout = RTA_options["inspectTimeout"] or 10;
-    -- amount of time before trying a player than timed out an inspect again
-    inspectRecovery = RTA_options["inspectRecovery"] or 60;
     -- the minimum amount of time before a reinspect is triggered on a specific character (barring specific triggers)
     renewTime = RTA_options["renewTime"] or 60 * 60;
     -- amount of time before purging old character data entries
@@ -582,7 +577,6 @@ function events:PLAYER_LOGOUT()
     ["debugOn"]               = debugOn,
     ["inspectInterval"]       = inspectInterval,
     ["inspectTimeout"]        = inspectTimeout,
-    ["inspectRecovery"]       = inspectRecovery,
     ["renewTime"]             = renewTime,
     ["purgeTime"]             = purgeTime,
     ["purgeTimeXr"]           = purgeTimeXr,
@@ -597,7 +591,7 @@ function events:INSPECT_READY()
     else
       debug("Retrieval of specialization info failed!", 1);
       ClearInspectPlayer();
-      inspectFailed[name] = time();
+      inspectFailed[name] = true;
       inspectInProgress = false;
       inspectStart = nil;
     end
