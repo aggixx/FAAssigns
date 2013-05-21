@@ -492,7 +492,7 @@ function events:ADDON_LOADED(addon)
     RTA_options           = RTA_options or {};
     table_specializations = RTA_options["table_specializations"] or {};
     table_encounters      = RTA_options["table_encounters"] or {};
-    debugOn = RTA_options["debugOn"] or 2;
+    debugOn = RTA_options["debugOn"] or 0;
     -- inspect scan interval (eg: how often it is checked if anyone needs a renew)
     inspectInterval = RTA_options["inspectInterval"] or 15;
     -- amount of time before an inspect request is abandoned
