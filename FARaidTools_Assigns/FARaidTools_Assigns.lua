@@ -155,7 +155,6 @@ local function generateAssigns(templateString)
     local candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
 
     for j=1,#ROLE_STRINGS do
-      debug(ROLE_STRINGS[j][1], 2);
       local k = 1;
       while string.match(blocks[i], string.format(ROLE_STRINGS[j][2], k)) do -- while there is spots left of this role to fill
         local success;
@@ -164,7 +163,7 @@ local function generateAssigns(templateString)
           -- check if this candidate matches our criteria
           if table_specializations[candidates[limit-l]] then
             local id = table_specializations[candidates[limit-l]][2]
-            if RTA_specData[id] and RTA_specData[id][ROLE_STRINGS[j][2]] then
+            if RTA_specData[id] and RTA_specData[id][ROLE_STRINGS[j][1]] then
               -- this candidate matches
               blocks[i] = string.gsub(blocks[i], string.format(ROLE_STRINGS[j][2], k), candidates[limit-l]); -- replace template text with candidate's name
               table.remove(candidates, limit-l); -- each player can only be assigned once per block
@@ -174,19 +173,22 @@ local function generateAssigns(templateString)
             end
           end
         end
-	debug("k = "..k, 3);
         if success then
           k = k + 1; -- successfully found a match, so keep going
         else -- we're out of candidates for this role so break loop early
-          break; -- TODO: Replace any remaining matches with some PH text, or remove.
+          blocks[i] = string.gsub(blocks[i], "%s*<"..ROLE_STRINGS[j][1].."%d+>", ""); -- Remove any remaining matches
+          break;
         end
       end
     end
   end
   
   local s = "";
-  for i, v in ipairs(blocks) do
-    local s = s .. v;
+  for i=1,#blocks do
+    if i > 1 then
+      s = s .. "\n";
+    end
+    s = s .. blocks[i];
   end
   return s;
 end
@@ -237,14 +239,23 @@ local function slashParse(msg, editbox)
   -- set encounter name to lower case
   msg = string.lower(msg);
 
+  -- remove any difficulty suffix
+  local difficulty = string.match(msg, "%d%d[hn]$") or "";
+  if difficulty then
+    msg = string.gsub(msg, "%d%d[hn]$", "");
+  end
+  
   -- remove all non-alphabetical letters from the encounter name
   msg = string.gsub(msg, "[^%l]", "");
+  
+  -- reattach difficulty suffix
+  msg = msg..difficulty;
   
   if table_encounters[msg] then
     --RTAssigns:Show()
     -- TODO: set the display window to the corresponding encounter entry
     debug('Loading template for encounter "'..msg..'".', 1);
-    print(generateAssigns(table_encounters[msg]));
+    debug(generateAssigns(table_encounters[msg]));
   else
     debug('Template for encounter "'..msg..'" was not found!');
   end
@@ -254,7 +265,7 @@ SlashCmdList["ASSIGNS"] = slashParse;
 local function onUpdate(self, elapsed)
   local currentTime = time();
   timeSinceLastCheck = timeSinceLastCheck + elapsed;
-  if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and (not InCombatLockdown() or debugOn >= 3) then
+  if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and not InCombatLockdown() then
     debug("Scanning "..GetNumGroupMembers().." group members for inspect candidates...", 3);
     timeSinceLastCheck = 0;
     
