@@ -1,5 +1,6 @@
 -- load libraries
 local libSerialize = LibStub:GetLibrary("AceSerializer-3.0");
+local AceGUI = LibStub("AceGUI-3.0");
 
 -- declare strings
 local ADDON_NAME = "FARaidTools_Assigns";
@@ -13,7 +14,7 @@ local ADDON_MSG_PREFIX = "RT_Assigns";
 
 local ASSIGN_BLOCK_NEW = "\n\-\-NEW BLOCK\-\-\n";
 
-local ROLE_STRINGS = { -- FIXME: Change this so it is not keyed! pairs() does not respect its order.
+local ROLE_STRINGS = {
   -- {"role", "<role%d>"},
   {"tank", "<tank%d>"}, -- TANK
   {"rheal", "<rheal%d>"}, -- NON-MONK HEALERS
@@ -35,6 +36,7 @@ local purgeTime;
 local purgeTimeXr;
 local table_specializations;
 local table_encounters;
+local table_dropdown;
 
 -- declare variables
 local _;
@@ -45,6 +47,7 @@ local inspectStart;
 local groupType;
 local updateMsg = false;
 local inspectFailed = {};
+local dropdownValue;
 
 --helper functions
 local function debug(msg, verbosity)
@@ -111,6 +114,31 @@ local function GetDataCompletionRate()
   return count, total, missing
 end
 
+local function GetEncounterSlug(msg)
+  -- set encounter name to lower case
+  msg = string.lower(msg);
+
+  -- remove any difficulty suffix
+  local difficulty = string.match(msg, "%d%d?[hnlc]$") or "";
+  if difficulty then
+    msg = string.gsub(msg, "%d%d?[hnlc]$", "");
+  end
+  
+  -- remove all non-alphabetical letters from the encounter name
+  msg = string.gsub(msg, "[^%l]", "");
+  
+  -- reattach difficulty suffix
+  return msg..difficulty;
+end
+
+local function GetDropdownTable()
+  local t = {};
+  for i, v in pairs(table_encounters) do
+    table.insert(t, v["displayName"]);
+  end
+  return t
+end
+
 -- main code
 local function GetSpecializationInfoByName(name)
   if table_specializations[name] then
@@ -142,14 +170,12 @@ local function generateAssigns(templateString)
       break;
     end
   end
-  debug({["blocks"] = blocks}, 2);
   
   -- assemble a list of candidates, we'll make a copy of this list once per block
   local candidatesCopy = {};
   for i=1,GetNumGroupMembers() do
     table.insert(candidatesCopy, UnitNameRealm(GetUnitId(i)));
   end
-  debug({["candidatesCopy"] = candidatesCopy}, 2);
 
   for i=1,#blocks do
     local candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
@@ -192,6 +218,176 @@ local function generateAssigns(templateString)
   end
   return s;
 end
+
+local function onUpdate(self, elapsed)
+  local currentTime = time();
+  timeSinceLastCheck = timeSinceLastCheck + elapsed;
+  if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and not InCombatLockdown() then
+    debug("Scanning "..GetNumGroupMembers().." group members for inspect candidates...", 3);
+    timeSinceLastCheck = 0;
+    
+    for i=1,GetNumGroupMembers() do
+      local unitId = GetUnitId(i);
+      local name = UnitNameRealm(unitId);
+      if name == playerName then
+	debug("Inspect NOT triggered for "..name.." (Reason: is player).", 4);
+      elseif name == "Unknown" then
+	debug("Inspect NOT triggered for "..name.." (Reason: is Unknown).", 4);
+      else
+        local lastCheck = GetSpecializationInfoByName(name);
+        if (not lastCheck or currentTime - lastCheck >= renewTime) and not inspectFailed[name] then
+          if CanInspect(unitId) and UnitIsConnected(unitId) then
+            debug("Triggered inspect for "..name..".", 1);
+            NotifyInspect(unitId);
+            inspectInProgress, inspectStart = unitId, currentTime;
+            break;
+	  elseif debugOn >= 4 then
+	   local reason;
+	    if not CanInspect(unitId) then
+	      reason = "CanInspect";
+	    else
+	      reason = "UnitIsConnected";
+	    end
+	    debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 4);
+          end
+        elseif debugOn >= 4 then
+	  local reason;
+	  if not (not lastCheck or currentTime - lastCheck >= renewTime) then
+	    reason = "lastCheck";
+	  else
+	    reason = "inspectFailed";
+	  end
+	  debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 4);
+        end
+      end
+    end
+  elseif inspectInProgress then
+    if currentTime - inspectStart >= inspectTimeout then
+      local name = UnitNameRealm(inspectInProgress);
+      if name then
+        debug("Inspect for "..name.." timed out!", 2);
+        inspectFailed[name] = currentTime;
+      end
+      ClearInspectPlayer();
+      inspectInProgress = false;
+      inspectStart = nil;
+      
+      timeSinceLastCheck = inspectInterval; -- cause an immediate check for another player to inspect
+    end
+  end
+  
+  for i, v in pairs(inspectFailed) do
+    if currentTime - v >= inspectRecovery then
+      inspectFailed[i] = nil;
+    end
+  end
+end
+
+local onUpdateFrame = CreateFrame("frame")
+onUpdateFrame:SetScript("OnUpdate", onUpdate)
+
+-- #############
+-- GUI START
+-- #############
+
+-- Create a container frame
+local frame = AceGUI:Create("Frame");
+frame:SetCallback("OnClose", function(this)
+  this:Hide()
+end);
+frame:SetTitle("FARaidTools_Assigns");
+--frame:SetStatusText("Status Bar");
+frame:SetWidth(300);
+frame:SetHeight(389);
+frame:EnableResize(false);
+frame:SetLayout("Flow");
+
+-- Create the output box
+local editboxOutput = AceGUI:Create("MultiLineEditBox");
+editboxOutput:SetLabel("Output");
+editboxOutput:SetWidth(300);
+editboxOutput:SetNumLines(6);
+
+-- Create the template box
+local editboxInput = AceGUI:Create("MultiLineEditBox");
+editboxInput:SetLabel("Template");
+editboxInput:SetWidth(300);
+editboxInput:SetNumLines(6);
+
+-- Create the encounter selection dropdown
+local dropdown = AceGUI:Create("Dropdown");
+dropdown:SetLabel("Encounter");
+dropdown:SetWidth(300);
+
+-- Create the announce button
+local button = AceGUI:Create("Button");
+button:SetWidth(150);
+button:SetHeight(17);
+button:SetText("Announce to Group");
+
+-- add widgets to frame as children
+frame:AddChild(dropdown);
+frame:AddChild(editboxInput);
+frame:AddChild(editboxOutput);
+frame:AddChild(button);
+
+-- set scripts
+local function editboxInput_OnEnterPressed(this, event, template)
+  for i, v in pairs(table_encounters) do
+    if table_dropdown[dropdownValue] == v["displayName"] then
+      table_encounters[i]["template"] = template;
+      break;
+    end
+  end
+  editboxOutput:SetText(generateAssigns(template));
+end
+
+local function dropdown_OnValueChanged(this, event, item)
+  dropdownValue = item;
+  local encounter = GetEncounterSlug(table_dropdown[item]);
+  if table_encounters[encounter] then
+    editboxInput:SetText(table_encounters[encounter]["template"]);
+    editboxInput_OnEnterPressed(nil, nil, table_encounters[encounter]["template"]);
+  else
+    debug("Encounter not found!");
+  end
+end
+
+dropdown:SetCallback("OnValueChanged", dropdown_OnValueChanged);
+editboxInput:SetCallback("OnEnterPressed", editboxInput_OnEnterPressed);
+
+button:SetCallback("OnClick", function(this, event)
+  local text, lines = editboxOutput:GetText(), {};
+  while 1 do
+    local line = string.match(text, "^(.-)\n");
+    if line then
+      table.insert(lines, line);
+      text = string.gsub(text, "^.-\n", "");
+    else
+      table.insert(lines, text); -- insert the last line into the table
+      break;
+    end
+  end
+    
+  local channel;
+  if groupType == "raid" then
+    if UnitIsGroupLeader("player") or UnitIsRaidOfficer("player") then
+      channel = "RAID_WARNING";
+    else
+      channel = "RAID";
+    end
+  elseif groupType == "party" then
+    channel = "PARTY";
+  end
+    
+  for i=1,#lines do
+    SendChatMessage(lines[i], channel);
+  end
+end);
+
+-- #############
+-- GUI END
+-- #############
 
 SLASH_ASSIGNS1 = "/assigns";
 local function slashParse(msg, editbox)
@@ -236,98 +432,57 @@ local function slashParse(msg, editbox)
     return;
   end
   
-  -- set encounter name to lower case
-  msg = string.lower(msg);
-
-  -- remove any difficulty suffix
-  local difficulty = string.match(msg, "%d%d[hn]$") or "";
-  if difficulty then
-    msg = string.gsub(msg, "%d%d[hn]$", "");
+  if not string.match(msg, "%s*%d%d?[hnlcHNLC]$") then
+    local diff = select(3, GetInstanceInfo());
+    if diff > 0 then
+      if diff == 1 then
+        msg = msg .. " 5N";
+      elseif diff == 2 then
+        msg = msg .. " 5H";
+      elseif diff == 3 then
+        msg = msg .. " 10N";
+      elseif diff == 4 then
+        msg = msg .. " 25N";
+      elseif diff == 5 then
+        msg = msg .. " 10H";
+      elseif diff == 6 then
+        msg = msg .. " 25H";
+      elseif diff == 7 then
+        msg = msg .. " 25L";
+      elseif diff == 8 then
+        msg = msg .. " 5C";
+      elseif diff == 9 then
+        msg = msg .. " 40N";
+      elseif diff == 10 then
+        msg = msg .. " 3N";
+      elseif diff == 11 then
+        msg = msg .. " 3H";
+      end
+    end
   end
   
-  -- remove all non-alphabetical letters from the encounter name
-  msg = string.gsub(msg, "[^%l]", "");
+  msg = GetEncounterSlug(msg);
   
-  -- reattach difficulty suffix
-  msg = msg..difficulty;
+  if not table_encounters[msg] then
+    msg = string.gsub(msg, "%s*%d%d?[hnlc]$", "");
+  end
   
   if table_encounters[msg] then
-    --RTAssigns:Show()
-    -- TODO: set the display window to the corresponding encounter entry
     debug('Loading template for encounter "'..msg..'".', 1);
-    debug(generateAssigns(table_encounters[msg]));
+    frame:Show()
+    for i=1,#table_dropdown do
+      if table_encounters[msg]["displayName"] == table_dropdown[i] then
+        dropdown:SetValue(i);
+        dropdown_OnValueChanged(nil, nil, i);
+        break;
+      end
+    end
   else
     debug('Template for encounter "'..msg..'" was not found!');
   end
 end
 SlashCmdList["ASSIGNS"] = slashParse;
 
-local function onUpdate(self, elapsed)
-  local currentTime = time();
-  timeSinceLastCheck = timeSinceLastCheck + elapsed;
-  if not inspectInProgress and timeSinceLastCheck >= inspectInterval and (not InspectFrame or not InspectFrame:IsShown()) and not InCombatLockdown() then
-    debug("Scanning "..GetNumGroupMembers().." group members for inspect candidates...", 3);
-    timeSinceLastCheck = 0;
-    
-    for i=1,GetNumGroupMembers() do
-      local unitId = GetUnitId(i);
-      local name = UnitNameRealm(unitId);
-      if name == playerName then
-	debug("Inspect NOT triggered for "..name.." (Reason: is player).", 4);
-        return;
-      elseif name == "Unknown" then
-	debug("Inspect NOT triggered for "..name.." (Reason: is Unknown).", 4);
-        return;
-      end
-      local lastCheck = GetSpecializationInfoByName(name);
-      if (not lastCheck or currentTime - lastCheck >= renewTime) and not inspectFailed[name] then
-        if CanInspect(unitId) and UnitIsConnected(unitId) then
-          debug("Triggered inspect for "..name..".", 1);
-          NotifyInspect(unitId);
-          inspectInProgress, inspectStart = unitId, currentTime;
-          break;
-	elseif debugOn >= 4 then
-	  local reason;
-	  if not CanInspect(unitId) then
-	    reason = "CanInspect";
-	  else
-	    reason = "UnitIsConnected";
-	  end
-	  debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 4);
-        end
-      elseif debugOn >= 4 then
-	local reason;
-	if not (not lastCheck or currentTime - lastCheck >= renewTime) then
-	  reason = "lastCheck";
-	else
-	  reason = "inspectFailed";
-	end
-	debug("Inspect NOT triggered for "..name.." (Reason: "..reason..").", 4);
-      end
-    end
-  elseif inspectInProgress then
-    if currentTime - inspectStart >= inspectTimeout then
-      local name = UnitNameRealm(inspectInProgress);
-      debug("Inspect for "..name.." timed out!", 2)
-      ClearInspectPlayer();
-      inspectFailed[name] = currentTime;
-      inspectInProgress = false;
-      inspectStart = nil;
-      
-      timeSinceLastCheck = inspectInterval; -- cause an immediate check for another player to inspect
-    end
-  end
-  
-  for i, v in pairs(inspectFailed) do
-    if currentTime - v >= inspectRecovery then
-      inspectFailed[i] = nil;
-    end
-  end
-end
-
-local onUpdateFrame = CreateFrame("frame")
-onUpdateFrame:SetScript("OnUpdate", onUpdate)
-	
 local frame, events = CreateFrame("Frame"), {}
 function events:ADDON_LOADED(addon)
   if addon == ADDON_NAME then
@@ -349,6 +504,8 @@ function events:ADDON_LOADED(addon)
     purgeTimeXr = RTA_options["purgeTimeXr"] or 3 * 24 * 60 * 60;
     
     RegisterAddonMessagePrefix("RT_Assigns");
+    table_dropdown = GetDropdownTable();
+    dropdown:SetList(table_dropdown);
   end
 end
 function events:PLAYER_LOGIN()
