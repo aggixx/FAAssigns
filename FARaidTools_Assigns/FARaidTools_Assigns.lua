@@ -95,6 +95,8 @@ end
 local function GetUnitId(i)
   if groupType == "player" then
     return groupType;
+  elseif groupType == "party" and i == GetNumGroupMembers() then
+    return "player";
   else
     return groupType..i;
   end
@@ -177,8 +179,86 @@ local function generateAssigns(templateString)
   end
 
   for i=1,#blocks do
-    local candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
+    local candidates
+    if debugOn > 0 and groupType == "player" then
+      candidates = {};
+      for j, v in pairs(table_specializations) do
+        table.insert(candidates, j);
+      end
+    else
+      candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
+    end
+    --debug(candidates, 1);
 
+    -- parse groups
+    local x = 0;
+    while string.match(blocks[i], "%d+{%d+%l+%s?.-}") and x < 100 do
+      x = x + 1;
+      local group = string.match(blocks[i], "%d+{%d+%l+%s?.-}");
+      local unitCap = tonumber(string.match(blocks[i], "(%d+){%d+%l+%s?.-}"));
+      debug("group unitCap = "..unitCap, 1);
+      local s = "";
+      
+      local y = 0;
+      while string.match(group, "%d+%l+") and y < 25 do
+	y = y + 1;
+        local roleCap, role = string.match(group, "(%d+)(%l+)");
+	roleCap = tonumber(roleCap);
+	debug("role = "..role..", roleCap = "..roleCap, 1);
+	
+	local limit = #candidates;
+        for j=0,limit-1 do -- loop through all remaining candidates in this block
+          -- check if this candidate matches the role criteria
+          if table_specializations[candidates[limit-j]] then
+            local id = table_specializations[candidates[limit-j]][2]
+            if RTA_specData[id] and RTA_specData[id][role] then
+	      debug("Adding "..candidates[limit-j].." to s2.", 1);
+	      
+	      -- append the player's name to s2
+	      if s ~= "" then
+	        s = s .. " ";
+	      end
+	      s = s .. string.match(candidates[limit-j], "^%a+");
+	      
+	      -- remove the player from the candidate list
+	      table.remove(candidates, limit-j);
+	      
+	      -- this candidate matches
+	      -- decrement the param count
+	      roleCap = roleCap - 1
+	      if roleCap > 0 then
+	        debug("Decremented "..role.." to "..roleCap..".", 1);
+	        group = string.gsub(group, string.match(group, "%d+%l+"), roleCap..role, 1);
+	      else
+	        debug("Role limit reached, removed "..role.." param.", 1);
+	        group = string.gsub(group, string.match(group, "%d+%l+%s*"), "", 1);
+		break;
+	      end
+	      
+	      if select(2, string.gsub(s, "[%a-]+", "")) >= unitCap then
+		break;
+	      else
+	        debug("players in group = "..select(2, string.gsub(s, "[%a-]+", ""))..", unitCap = "..unitCap, 1);
+	      end
+	    end
+	  end
+	  
+	  if j == limit-1 then
+	    debug("Candidate limit reached.", 1);
+	    group = string.gsub(group, string.match(group, "%d+%l+%s*"), "", 1);
+	  end
+	end
+	
+	if select(2, string.gsub(s, "[%a-]+", "")) >= unitCap then
+	  debug("Group limit reached ("..select(2, string.gsub(s, "[%a-]+", ""))..").", 1);
+	  break;
+	end
+      end
+      
+      blocks[i] = string.gsub(blocks[i], "%d+{%d+%l+%s?.-}", s, 1);
+    end
+    
+    -- parse individual
     for j=1,#ROLE_STRINGS do
       local k = 1;
       while string.match(blocks[i], string.format(ROLE_STRINGS[j][2], k)) do -- while there is spots left of this role to fill
@@ -190,7 +270,7 @@ local function generateAssigns(templateString)
             local id = table_specializations[candidates[limit-l]][2]
             if RTA_specData[id] and RTA_specData[id][ROLE_STRINGS[j][1]] then
               -- this candidate matches
-              blocks[i] = string.gsub(blocks[i], string.format(ROLE_STRINGS[j][2], k), candidates[limit-l]); -- replace template text with candidate's name
+              blocks[i] = string.gsub(blocks[i], string.format(ROLE_STRINGS[j][2], k), string.match(candidates[limit-l], "^%a+")); -- replace template text with candidate's name
               table.remove(candidates, limit-l); -- each player can only be assigned once per block
               -- so remove them from the candidate list for this block
               success = true; -- set success variable so loop knows to continue
@@ -530,14 +610,26 @@ function events:ADDON_LOADED(addon)
     RTA_options           = RTA_options or {};
     table_specializations = RTA_options["table_specializations"] or {};
     table_encounters      = RTA_options["table_encounters"] or {
-	["leishen25n"] = {
-		["template"] = "{star}: <heal1> <tank1> <dps1> <dps7> <dps11> <dps15> <dps19>\n{square}: <heal2> <heal5> <dps2> <dps5> <dps8> <dps12> <dps16>\n{diamond}: <heal3> <tank2> <dps3> <dps9> <dps13> <dps17>\n{x}: <heal4> <heal6> <dps4> <dps6> <dps10> <dps14> <dps18>",
-		["displayName"] = "Lei Shen 25N",
-	},
-	["durumutheforgotten10n"] = {
-		["template"] = "Red: <rdps1> <rdps2> <rdps3> <mdps3> <mdps4>\nYellow: <tank1> <tank2> <mdps1> <mdps2> <rdps4> <rdps5> <dps2>\nBlue: <heal1> <heal2> <heal3> <dps1>",
-		["displayName"] = "Durumu the Forgotten 10N",
-	},
+		["darkanimus25n"] = {
+			["template"] = "Starting from {x} flare:\nGolem #1: <rdps1>\nGolem #2: <rdps1>\nGolem #3: <dps1>\nGolem #4: <dps2>\nGolem #5: <rdps2>\nGolem #6: <rdps2>\nGolem #7: <dps3>\nGolem #8: <dps4>\nGolem #9: <dps5>\nGolem #10: <tank1>\nGolem #11: <tank1>\nGolem #12: <dps6>\nGolem #13: <dps7>\nGolem #14: <dps8>\nGolem #15: <tank2>\nGolem #16: <tank2>\nGolem #17: <dps9>\nGolem #18: <dps10>\nGolem #19: <rdps3>\nGolem #20: <rdps3>\nGolem #21: <dps11>\nGolem #22: <dps12>\nGolem #23: <rdps4>\nGolem #24: <rdps4>\nGolem #25: <dps13>",
+			["displayName"] = "Dark Animus 25N",
+		},
+		["leishen25n"] = {
+			["template"] = "{star}: 6{1heal 1tank 3dps 1heal 3dps}\n{square}: 6{1heal 4dps 1heal 2dps}\n{diamond} 6{1heal 1tank 3dps 1heal 3dps}\n{x}: 7{1heal 5dps 1heal 2dps}",
+			["displayName"] = "Lei Shen 25N",
+		},
+		["councilofelders25n"] = {
+			["template"] = "Sul: 3{3mdps 3dps}",
+			["displayName"] = "Council of Elders 25N",
+		},
+		["darkanimus10n"] = {
+			["template"] = "Starting from {x} flare:\nGolem #1: <rdps1>\nGolem #2: <rdps1>'s pet\nGolem #3: <rdps2>\nGolem #4: <rdps2>'s pet\nGolem #5: <tank1>\nGolem #6: <tank1>\nGolem #7: <tank2>\nGolem #8: <tank2>\nGolem #9: <dps1>\nGolem #10: <dps2>\nGolem #11: <rdps3>\nGolem #12: <rdps3>'s pet",
+			["displayName"] = "Dark Animus 10N",
+		},
+		["durumutheforgotten10n"] = {
+			["template"] = "Red: 3{3rdps 3dps}\nYellow: 4{2tank 4dps}\nBlue: 3{3heal 3dps}",
+			["displayName"] = "Durumu the Forgotten 10N",
+		},
     };
     debugOn = RTA_options["debugOn"] or 0;
     -- inspect scan interval (eg: how often it is checked if anyone needs a renew)
