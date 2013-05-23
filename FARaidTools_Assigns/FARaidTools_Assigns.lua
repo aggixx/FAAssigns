@@ -4,7 +4,7 @@ local AceGUI = LibStub("AceGUI-3.0");
 
 -- declare strings
 local ADDON_NAME = "FARaidTools_Assigns";
-local ADDON_VERSION_FULL = "v1.0";
+local ADDON_VERSION_FULL = "v1.0a";
 local ADDON_VERSION = string.gsub(ADDON_VERSION_FULL, "[^%d]", "");
 local ADDON_DOWNLOAD_URL = "https://github.com/aggixx/FARaidTools_Assigns";
 
