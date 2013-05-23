@@ -4,7 +4,7 @@ local AceGUI = LibStub("AceGUI-3.0");
 
 -- declare strings
 local ADDON_NAME = "FARaidTools_Assigns";
-local ADDON_VERSION_FULL = "v1.0a";
+local ADDON_VERSION_FULL = "v1.0b";
 local ADDON_VERSION = string.gsub(ADDON_VERSION_FULL, "[^%d]", "");
 local ADDON_DOWNLOAD_URL = "https://github.com/aggixx/FARaidTools_Assigns";
 
@@ -148,9 +148,15 @@ local function GetSpecializationInfoByName(name)
   end
 end
 
-local function SetSpecializationInfo(name, id, resetTime)
+local function SetSpecializationInfo(name, id, resetTime, overrideAnnounce)
   if name and id then
-    table_specializations[name] = {time(), id};
+    local currentTime = time()
+    table_specializations[name] = {currentTime, id};
+    if not overrideAnnounce and groupType ~= "player" then
+      SendAddonMessage(ADDON_MSG_PREFIX, {["table_specializations"] = {
+        [name] = id,
+      }}, groupType);
+    end
     return true
   elseif name and resetTime and table_specializations[name] then
     table_specializations[name] = {0, table_specializations[name][2]};
@@ -741,9 +747,10 @@ function events:GROUP_JOINED()
   end
 end
 function events:CHAT_MSG_ADDON(prefix, message, channel, sender)
-  if prefix == ADDON_MSG_PREFIX then
-    local message = libSerialize:Deserialize(message)
+  if prefix == ADDON_MSG_PREFIX and sender ~= playerName then
+    _, message = libSerialize:Deserialize(message)
     if not (message and type(message) == "table") then
+      debug("Recieved bad data via an addon message.", 1);
       return;
     end
     for i, v in pairs(message) do
@@ -766,6 +773,15 @@ function events:CHAT_MSG_ADDON(prefix, message, channel, sender)
 	    end
 	  end
 	end
+      elseif i == "table_specializations" then
+        for j, id in pairs(v) do
+	  SetSpecializationInfo(j, id, nil, true);
+	  debug("Recieved specialization data for "..j.." from "..sender..".", 1)
+	end
+      else
+        debug("Recieved unknown data via an addon message.", 1);
+	debug(i, 1);
+	debug(v, 1);
       end
     end
   end
