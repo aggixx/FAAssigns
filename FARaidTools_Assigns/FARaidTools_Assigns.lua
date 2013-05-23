@@ -378,6 +378,7 @@ frame:SetWidth(300);
 frame:SetHeight(389);
 frame:EnableResize(false);
 frame:SetLayout("Flow");
+frame:Hide();
 
 -- Create the output box
 local editboxOutput = AceGUI:Create("MultiLineEditBox");
@@ -414,11 +415,6 @@ frame:AddChild(button2);
 frame:AddChild(editboxInput);
 frame:AddChild(editboxOutput);
 frame:AddChild(button);
-
--- Hide GUI
-if debugOn == 0 then
-  frame:Hide();
-end
 
 -- set scripts
 local function editboxInput_OnEnterPressed(this, event, template)
@@ -516,7 +512,7 @@ local function slashParse(msg, editbox)
     if UnitExists("target") and not UnitIsPlayer("target") then
       msg = UnitName("target");
     else
-      debug("You must specify (or target) a non-player unit.")
+      frame:Show();
       return;
     end
   elseif string.match(msg, "^dump ") then
@@ -545,11 +541,15 @@ local function slashParse(msg, editbox)
     return;
   elseif string.match(msg, "^debug %d") then
     debugOn = tonumber(string.match(msg, "^debug (%d)"));
-    if debugOn then
+    if debugOn > 0 then
       debug("Debug is now ON ("..debugOn..").");
     else
       debug("Debug is now OFF.");
     end
+    return;
+  elseif string.match(msg, "^new$") then
+    frame:Show()
+    StaticPopup_Show("RTA_NEW_ENCOUNTER")
     return;
   end
   
@@ -645,7 +645,7 @@ function events:ADDON_LOADED(addon)
     
     RegisterAddonMessagePrefix("RT_Assigns");
     table_dropdown = GetDropdownTable();
-    dropdown:SetList(table_dropdown);
+    dropdown:SetList(table_dropdown);    
   end
 end
 function events:PLAYER_LOGIN()
