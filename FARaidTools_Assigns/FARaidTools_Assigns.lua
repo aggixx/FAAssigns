@@ -3,16 +3,16 @@ local libSerialize = LibStub:GetLibrary("AceSerializer-3.0");
 local AceGUI = LibStub("AceGUI-3.0");
 
 -- declare strings
-local ADDON_NAME = "FARaidTools_Assigns";
-local ADDON_VERSION_FULL = "v1.0b";
+local ADDON_NAME = "FA Assigns";
+local ADDON_VERSION_FULL = "v1.0c";
 local ADDON_VERSION = string.gsub(ADDON_VERSION_FULL, "[^%d]", "");
 local ADDON_DOWNLOAD_URL = "https://github.com/aggixx/FARaidTools_Assigns";
 
 local ADDON_COLOR = "FFF9CC30";
 local ADDON_CHAT_HEADER  = "|c" .. ADDON_COLOR .. "FA Assigns:|r ";
-local ADDON_MSG_PREFIX = "RT_Assigns";
+local ADDON_MSG_PREFIX = "FA_Assigns";
 
-local ASSIGN_BLOCK_NEW = "\n\-\-NEW BLOCK\-\-\n";
+local ASSIGN_BLOCK_NEW = "\n\-\-NEW BLOCK\-\-\n"; -- doesn't work
 
 local ROLE_STRINGS = {
   -- {"role", "<role%d>"},
@@ -23,6 +23,13 @@ local ROLE_STRINGS = {
   {"rdps", "<rdps%d>"}, -- RANGED DPS
   {"mdps", "<mdps%d>"}, -- MELEE DPS
   {"dps", "<dps%d>"}, -- DPS
+  {"spell", "<spell%d>"}, -- SPELL
+  {"phys", "<phys%d>"}, -- PHYS
+  {"pet", "<pet%d>"}, -- PET
+  {"petc", "<petc%d>"}, -- PETCLASS
+  {"multidot", "<multidot%d>"}, -- MULTIDOT
+  {"nosolo", "<nosolo%d>"}, -- NO SOLO SOAK (LEI SHEN)
+  {"hnosolo", "<hnosolo%d>"}, -- NO SOLO SOAK (HEALER)(LEI SHEN)
 };
 
 -- declare locals for variables declared in ADDON_LOADED
@@ -120,9 +127,9 @@ local function GetEncounterSlug(msg)
   msg = string.lower(msg);
 
   -- remove any difficulty suffix
-  local difficulty = string.match(msg, "%d%d?[hnlc]$") or "";
+  local difficulty = string.match(msg, "%d%d?[hnlcf]?$") or "";
   if difficulty then
-    msg = string.gsub(msg, "%d%d?[hnlc]$", "");
+    msg = string.gsub(msg, "%d%d?[hnlcf]?$", "");
   end
   
   -- remove all non-alphabetical letters from the encounter name
@@ -137,6 +144,7 @@ local function GetDropdownTable()
   for i, v in pairs(table_encounters) do
     table.insert(t, v["displayName"]);
   end
+  table.sort(t)
   return t
 end
 
@@ -181,9 +189,14 @@ local function generateAssigns(templateString)
   -- assemble a list of candidates, we'll make a copy of this list once per block
   local candidatesCopy = {};
   for i=1,GetNumGroupMembers() do
-    table.insert(candidatesCopy, UnitNameRealm(GetUnitId(i)));
+    local name = UnitNameRealm(GetUnitId(i))
+    table.insert(candidatesCopy, name);
+    if table_specializations[name] and RTA_specData[table_specializations[name][2]]["petc"] then
+      table.insert(candidatesCopy, name.."'s pet")
+    end
   end
-
+  debug(candidatesCopy, 2);
+  
   for i=1,#blocks do
     local candidates
     if debugOn > 0 and groupType == "player" then
@@ -194,7 +207,6 @@ local function generateAssigns(templateString)
     else
       candidates = candidatesCopy; -- grab a copy of the list of candidates for this block
     end
-    --debug(candidates, 1);
 
     -- parse groups
     local x = 0;
@@ -215,37 +227,46 @@ local function generateAssigns(templateString)
 	local limit = #candidates;
         for j=0,limit-1 do -- loop through all remaining candidates in this block
           -- check if this candidate matches the role criteria
-          if table_specializations[candidates[limit-j]] then
-            local id = table_specializations[candidates[limit-j]][2]
-            if RTA_specData[id] and RTA_specData[id][role] then
-	      debug("Adding "..candidates[limit-j].." to s2.", 4);
-	      
-	      -- append the player's name to s2
-	      if s ~= "" then
-	        s = s .. " ";
+	  local match;
+	  if role == "pet" and string.match(candidates[limit-j], "'s pet") then
+	    match = true;
+	  else
+	    if table_specializations[candidates[limit-j]] then
+	      local id = table_specializations[candidates[limit-j]][2]
+	      if RTA_specData[id] and RTA_specData[id][role] then
+	        match = true;
 	      end
-	      s = s .. string.match(candidates[limit-j], "^[^-]+");
+	    end
+	  end
+	    
+	  if match then
+	    debug("Adding "..candidates[limit-j].." to s2.", 4);
+	        
+	    -- append the player's name to s2
+	    if s ~= "" then
+	      s = s .. " ";
+	    end
+            s = s .. string.match(candidates[limit-j], "^[^-]+");
+	        
+	    -- remove the player from the candidate list
+	    table.remove(candidates, limit-j);
+	        
+	    -- this candidate matches
+	    -- decrement the param count
+	    roleCap = roleCap - 1
+	    if roleCap > 0 then
+	      debug("Decremented "..role.." to "..roleCap..".", 4);
+	      group = string.gsub(group, string.match(group, "%d+%l+"), roleCap..role, 1);
+	    else
+              debug("Role limit reached, removed "..role.." param.", 4);
+	      group = string.gsub(group, string.match(group, "%d+%l+%s*"), "", 1);
+	      break;
+	    end
 	      
-	      -- remove the player from the candidate list
-	      table.remove(candidates, limit-j);
-	      
-	      -- this candidate matches
-	      -- decrement the param count
-	      roleCap = roleCap - 1
-	      if roleCap > 0 then
-	        debug("Decremented "..role.." to "..roleCap..".", 4);
-	        group = string.gsub(group, string.match(group, "%d+%l+"), roleCap..role, 1);
-	      else
-	        debug("Role limit reached, removed "..role.." param.", 4);
-	        group = string.gsub(group, string.match(group, "%d+%l+%s*"), "", 1);
-		break;
-	      end
-	      
-	      if select(2, string.gsub(s, "[%a-]+", "")) >= unitCap then
-		break;
-	      else
-	        debug("players in group = "..select(2, string.gsub(s, "[%a-]+", ""))..", unitCap = "..unitCap, 4);
-	      end
+            if select(2, string.gsub(s, "[%a-]+", "")) >= unitCap then
+	      break;
+	    else
+	      debug("players in group = "..select(2, string.gsub(s, "[%a-]+", ""))..", unitCap = "..unitCap, 4);
 	    end
 	  end
 	  
@@ -559,7 +580,7 @@ local function slashParse(msg, editbox)
     return;
   end
   
-  if not string.match(msg, "%s*%d%d?[hnlcHNLC]$") then
+  if not string.match(msg, "%s*%d%d?[hnlcfHNLCF]$") then
     local diff = select(3, GetInstanceInfo());
     if diff > 0 then
       if diff == 1 then
@@ -591,7 +612,11 @@ local function slashParse(msg, editbox)
   msg = GetEncounterSlug(msg);
   
   if not table_encounters[msg] then
-    msg = string.gsub(msg, "%s*%d%d?[hnlc]$", "");
+    msg = string.gsub(msg, "%s*[hnlcf]?$"
+  end
+  
+  if not table_encounters[msg] then
+    msg = string.gsub(msg, "%s*%d%d?[hnlcf]?$", "");
   end
   
   if table_encounters[msg] then
@@ -616,25 +641,49 @@ function events:ADDON_LOADED(addon)
     RTA_options           = RTA_options or {};
     table_specializations = RTA_options["table_specializations"] or {};
     table_encounters      = RTA_options["table_encounters"] or {
-		["darkanimus25n"] = {
-			["template"] = "Starting from {x} flare:\nGolem #1: <rdps1>\nGolem #2: <rdps1>\nGolem #3: <dps1>\nGolem #4: <dps2>\nGolem #5: <rdps2>\nGolem #6: <rdps2>\nGolem #7: <dps3>\nGolem #8: <dps4>\nGolem #9: <dps5>\nGolem #10: <tank1>\nGolem #11: <tank1>\nGolem #12: <dps6>\nGolem #13: <dps7>\nGolem #14: <dps8>\nGolem #15: <tank2>\nGolem #16: <tank2>\nGolem #17: <dps9>\nGolem #18: <dps10>\nGolem #19: <rdps3>\nGolem #20: <rdps3>\nGolem #21: <dps11>\nGolem #22: <dps12>\nGolem #23: <rdps4>\nGolem #24: <rdps4>\nGolem #25: <dps13>",
-			["displayName"] = "Dark Animus 25N",
+		["darkanimus25h"] = {
+			["template"] = "Starting from {x} flare:\nGolem #1: Raoul\nGolem #2: 1{1pet 1rdps}\nGolem #3: 1{1pet 1rdps}\nGolem #4: 1{1rdps 1mdps}\nGolem #5: 1{1rdps 1mdps}\nGolem #6: 1{1mdps 1rdps}\nGolem #7: 1{1rdps 1mdps}\nGolem #8: 1{1rdps 1mdps}\nGolem #9: 1{1rdps 1mdps}\nGolems #10 & #11: 1{1tank}\nGolem #12: 1{1mdps 1rdps}\nGolem #13: 1{1tank}\nGolem #14: 1{1mdps 1rdps}\nGolems #15 & #16: 1{1tank}\nGolem #17: 1{1rdps 1mdps}\nGolem #18: 1{1rdps 1mdps}\nGolem #19: 1{1rdps 1mdps}\nGolem #20: 1{1mdps 1rdps}\nGolem #21: 1{1rdps 1mdps}\nGolem #22: 1{1rdps 1mdps}\nGolem #23: 1{1pet 1rdps}\nGolem #24: 1{1pet 1rdps}\nGolem #25: Gluth\nBoss DPS: 5{5mdps 5rdps}",
+			["displayName"] = "Dark Animus 25H",
+		},
+		["durumutheforgotten25"] = {
+			["template"] = "Float: 1{1mdps 1rdps 1tank 1heal}\nRed: 8{8mdps 8dps}\nYellow: 8{8tank 8rdps 8dps}\nBlue: 8{8heal 8mdps 8dps}",
+			["displayName"] = "Durumu the Forgotten 25",
+		},
+		["leishenhballs"] = {
+			["template"] = "Ball Formation:\n1: 1{1rdps 1rheal}\n2: 1{1rdps 1rheal}\n3: 1{1rdps 1rheal}\n4: 1{1rdps 1rheal}\n5: 1{1rdps 1rheal}\n6: 1{1rdps 1rheal}\n7: 1{1rdps 1rheal}\n8: 1{1rdps 1rheal}",
+			["displayName"] = "Lei Shen 25H Balls",
 		},
 		["leishen25n"] = {
-			["template"] = "{star}: 6{1heal 1tank 3dps 1heal 3dps}\n{square}: 6{1heal 4dps 1heal 2dps}\n{diamond} 6{1heal 1tank 3dps 1heal 3dps}\n{x}: 7{1heal 5dps 1heal 2dps}",
+			["template"] = "{square}: 7{1heal 4dps 1heal 2dps}\n{star}: 6{1heal 1tank 3dps 1heal 4dps}\n{diamond} 6{1heal 1tank 6dps}\n{x}: 6{1heal 6dps}",
 			["displayName"] = "Lei Shen 25N",
 		},
-		["councilofelders25n"] = {
-			["template"] = "Sul: 3{3mdps 3dps}",
-			["displayName"] = "Council of Elders 25N",
+		["durumutheforgotten10"] = {
+			["template"] = "Red: 3{3rdps 3dps}\nYellow: 4{2tank 4dps}\nBlue: 3{3heal 3dps}",
+			["displayName"] = "Durumu the Forgotten 10",
+		},
+		["darkanimus25n"] = {
+			["template"] = "Starting from {x} flare:\nGolem #1: <rdps1>\nGolem #2: <rdps1>\nGolem #3: <dps1>\nGolem #4: <dps2>\nGolem #5: <rdps2>\nGolem #6: <rdps2>\nGolem #7: <dps3>\nGolem #8: <dps4>\nGolem #9: <dps5>\nGolem #10: <tank3>\nGolem #11: <tank3>\nGolem #12: <dps6>\nGolem #13: <dps7>\nGolem #14: <dps8>\nGolem #15: <tank2>\nGolem #16: <tank2>\nGolem #17: <dps9>\nGolem #18: <dps10>\nGolem #19: <rdps3>\nGolem #20: <rdps3>\nGolem #21: <dps11>\nGolem #22: <dps12>\nGolem #23: <rdps4>\nGolem #24: <rdps4>\nGolem #25: <tank1>",
+			["displayName"] = "Dark Animus 25N",
 		},
 		["darkanimus10n"] = {
-			["template"] = "Starting from {x} flare:\nGolem #1: <rdps1>\nGolem #2: <rdps1>'s pet\nGolem #3: <rdps2>\nGolem #4: <rdps2>'s pet\nGolem #5: <tank1>\nGolem #6: <tank1>\nGolem #7: <tank2>\nGolem #8: <tank2>\nGolem #9: <dps1>\nGolem #10: <dps2>\nGolem #11: <rdps3>\nGolem #12: <rdps3>'s pet",
+			["template"] = "Starting from {x} flare:\nGolem #1: 1{1petc}\nGolem #2: 1{1pet}\nGolem #3: 1{1petc}\nGolem #4: 1{1pet}\nGolem #5&6: 1{1tank}\nGolem #7&8: 1{1tank}\nGolem #9: 1{1petc}\nGolem #10: 1{1pet}\nGolem #11: 1{1dps}\nGolem #12: 1{1dps}",
 			["displayName"] = "Dark Animus 10N",
 		},
-		["durumutheforgotten10n"] = {
-			["template"] = "Red: 3{3rdps 3dps}\nYellow: 4{2tank 4dps}\nBlue: 3{3heal 3dps}",
-			["displayName"] = "Durumu the Forgotten 10N",
+		["primordius25h"] = {
+			["template"] = "Dot Left: 3{3multidot}\nDot Right: 3{3multidot}\n== LEFT == // == RIGHT ==\n{diamond} 2{2mdps} // {x} 2{2mdps}\n{triangle} 2{2mdps 2rdps} // {star} 2{2mdps 2rdps}\nUnmarked L: 2{2rdps} // Unmarked R: 2{2rdps}\n\n6{6rdps}\n6{6mdps}",
+			["displayName"] = "Primordius 25H",
+		},
+		["twinconsorts25"] = {
+			["template"] = "{square}: 4{1rheal, 3rdps 1rheal}\n{diamond}: 4{1rheal, 3rdps 1rheal}\n{x}: 4{1rheal, 3rdps 1rheal}\n{triangle}: 4{1rheal, 3rdps 1rheal}",
+			["displayName"] = "Twin Consorts 25",
+		},
+		["councilofelders25"] = {
+			["template"] = "Sul: 3{3mdps 3dps}",
+			["displayName"] = "Council of Elders 25",
+		},
+		["leishen25h"] = {
+			["template"] = "{square}: 2{2hnosolo 2heal} 4{4nosolo 4dps}\n{star}: 6{1heal 5dps}\n{diamond}: 6{1heal 5dps}\n{x}: 6{1heal 5dps}\n",
+			["displayName"] = "Lei Shen 25H",
 		},
     };
     debugOn = RTA_options["debugOn"] or 0;
