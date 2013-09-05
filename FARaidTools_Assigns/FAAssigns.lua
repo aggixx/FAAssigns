@@ -6,11 +6,11 @@ local AceGUI = LibStub("AceGUI-3.0");
 local ADDON_NAME = "FA Assigns";
 local ADDON_VERSION_FULL = "v1.0c";
 local ADDON_VERSION = string.gsub(ADDON_VERSION_FULL, "[^%d]", "");
-local ADDON_DOWNLOAD_URL = "https://github.com/aggixx/FARaidTools_Assigns";
+local ADDON_DOWNLOAD_URL = "https://github.com/aggixx/FAAssigns";
 
 local ADDON_COLOR = "FFF9CC30";
 local ADDON_CHAT_HEADER  = "|c" .. ADDON_COLOR .. "FA Assigns:|r ";
-local ADDON_MSG_PREFIX = "FA_Assigns";
+local ADDON_MSG_PREFIX = "FAAssigns";
 
 local ASSIGN_BLOCK_NEW = "\n\-\-NEW BLOCK\-\-\n"; -- doesn't work
 
@@ -57,7 +57,7 @@ local dropdownValue;
 
 --helper functions
 local function debug(msg, verbosity)
-  if (not verbosity or debugOn >= verbosity) then
+  if (not verbosity or (debugOn and debugOn >= verbosity)) then
     if type(msg) == "string" or type(msg) == "number" then
       print(ADDON_CHAT_HEADER..msg);
     elseif type(msg) == "table" then
@@ -612,7 +612,7 @@ local function slashParse(msg, editbox)
   msg = GetEncounterSlug(msg);
   
   if not table_encounters[msg] then
-    msg = string.gsub(msg, "%s*[hnlcf]?$"
+    msg = string.gsub(msg, "%s*[hnlcf]?$", "");
   end
   
   if not table_encounters[msg] then
@@ -637,7 +637,7 @@ SlashCmdList["ASSIGNS"] = slashParse;
 
 local frame, events = CreateFrame("Frame"), {}
 function events:ADDON_LOADED(addon)
-  if addon == ADDON_NAME then
+  if addon == ADDON_MSG_PREFIX then
     RTA_options           = RTA_options or {};
     table_specializations = RTA_options["table_specializations"] or {};
     table_encounters      = RTA_options["table_encounters"] or {
