@@ -1,4 +1,4 @@
-## Interface: 50300
+## Interface: 50400
 ## Title: FA Assigns
 ## Notes: Provides automatically generated raid assignments by spec and role.
 ## Version: v1.0
